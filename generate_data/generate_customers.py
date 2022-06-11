@@ -40,10 +40,6 @@ month = 1
 
 import datetime
 now = datetime.datetime.now()
-now.second
-now.hour
-now.microsecond
-
 dte = datetime.datetime(year, month, 1, now.hour, now.minute, now.second, now.microsecond)
 
 
@@ -79,9 +75,6 @@ def fake_customer(id:int):
   
 def customer_change_address(customer:dict, period:datetime):
   now = datetime.datetime.now()
-  now.second
-  now.hour
-  now.microsecond
   customer["address_no"] = fake.building_number()
   customer["address_city"] = fake.city()
   customer["address_country"] = fake.country()
