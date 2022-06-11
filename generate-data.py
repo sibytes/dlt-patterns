@@ -59,10 +59,16 @@ def load_schema(stage:str, schema_name:str, dataset_name:str):
 
 # COMMAND ----------
 
-path = "/mnt/datalake/raw/sibytes/customer"
+
+schema_name = "sibytes"
+dataset_name = "customer"
+stage = "raw"
+lake_root = "/mnt/datalake"
+path = f"{lake_root}/{stage}/{schema_name}/{dataset_name}"
 total = 100
 year = 2022
 month = 1
+
 
 # COMMAND ----------
 
@@ -108,7 +114,7 @@ for i in range(10):
   period_name = period.strftime("%Y%m%d")
   period_path = period.strftime("%Y/%m/%d")
   to_path = f"{path}/{period_path}"
-  file_name = f"{to_path}/sibyte_customer_{period_name}.json"
+  file_name = f"{to_path}/{schema_name}_{dataset_name}_{period_name}.json"
   print(f"writing record_set: n = {len(record_set)} to {file_name}")
   os.makedirs(to_path, exist_ok=True)
   
@@ -134,8 +140,8 @@ display(df)
 
 # COMMAND ----------
 
-schema_path = "/mnt/datalake/schema/raw.sibytes"
-schema_file = f"{schema_path}/spark.raw.sibytes.customer.json"
+schema_path = f"{lake_root}/schema/{stage}.{schema_name}"
+schema_file = f"{schema_path}/spark.{stage}.{schema_name}.{dataset_name}.json"
 
 
 try_rm(f"file:{schema_path}")
@@ -151,7 +157,7 @@ try_copy(schema_file)
 
 # COMMAND ----------
 
-schema = load_schema("raw", "sibytes", "customer")
+schema = load_schema(stage, schema_name, dataset_name)
 
 raw_path = f"{path}/*/*/*/*.json"
 config = {
