@@ -64,6 +64,7 @@ schema_name = "sibytes"
 dataset_name = "customer"
 stage = "raw"
 lake_root = "/mnt/datalake"
+schema_root = f"{lake_root}/schema"
 path = f"{lake_root}/{stage}/{schema_name}/{dataset_name}"
 total = 100
 year = 2022
@@ -140,7 +141,7 @@ display(df)
 
 # COMMAND ----------
 
-schema_path = f"{lake_root}/schema/{stage}.{schema_name}"
+schema_path = f"{schema_root}/{stage}.{schema_name}"
 schema_file = f"{schema_path}/spark.{stage}.{schema_name}.{dataset_name}.json"
 
 
