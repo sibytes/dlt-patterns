@@ -8,65 +8,19 @@ from faker import Faker
 import datetime
 import json
 import os
-import sys
-from pprint import pprint
 
-pprint(sys.path)
 
 # COMMAND ----------
 
-import discover_modules
 import discover_modules
 discover_modules.go(spark)
-pprint(sys.path)
 
-# COMMAND ----------
-
-from pyspark.sql.types import StructType
-
-def try_copy(path:str):
-  
-  try:
-    dbutils.fs.rm(path, True)
-  except:
-    print(f"{path} doesn't exist")
-
-  dbutils.fs.cp(f"file:{path}", path, True)
-
-  try:
-    dbutils.fs.rm(f"file:{path}", True)
-  except:
-    print(f"file:{path} doesn't exist")
-
-    
-def try_rm(path:str):
-  
-  try:
-    dbutils.fs.rm(path, True)
-  except:
-    print(f"Path {path} does not exist.")
-    
-def load_schema(stage:str, schema_name:str, dataset_name:str):
-  
-  options = {"multiline": True,
-            "lineSep": "~",
-             "sep": "~"
-            }
-  path = f"/mnt/datalake/schema/{stage}.{schema_name}/spark.{stage}.{schema_name}.{dataset_name}.json"
-  print(f"Loading schema from {path}")
-  
-  df = spark.read.format("csv").options(**options).load(path)
-  json_schema = json.loads(df.first()[0])
-  json_schema = StructType.fromJson(json_schema)
-  
-  print("Schema Loaded")
-  print(json_schema)
-
-  return json_schema
-
-
-
-
+from utilities import (
+  try_copy,
+  try_rm,
+  load_schema,
+  save_schema
+)
 
 # COMMAND ----------
 
@@ -80,6 +34,17 @@ path = f"{lake_root}/{stage}/{schema_name}/{dataset_name}"
 total = 100
 year = 2022
 month = 1
+
+
+# COMMAND ----------
+
+import datetime
+now = datetime.datetime.now()
+now.second
+now.hour
+now.microsecond
+
+dte = datetime.datetime(year, month, 1, now.hour, now.minute, now.second, now.microsecond)
 
 
 # COMMAND ----------
@@ -104,22 +69,62 @@ def fake_customer(id:int):
     "contact_phone": fake.phone_number(),
     "contact_email": fake.email(),
     "address_no": fake.building_number(),
-    "city": fake.city(),
-    "country": fake.country(),
-    "postcode": fake.postcode(),
-    "street": fake.street_name()
+    "address_city": fake.city(),
+    "address_country": fake.country(),
+    "address_postcode": fake.postcode(),
+    "address_street": fake.street_name(),
+    "created": "",
+    "modified": ""
   }
+  
+def customer_change_address(customer:dict, period:datetime):
+  now = datetime.datetime.now()
+  now.second
+  now.hour
+  now.microsecond
+  customer["address_no"] = fake.building_number()
+  customer["address_city"] = fake.city()
+  customer["address_country"] = fake.country()
+  customer["address_postcode"] = fake.postcode()
+  customer["address_street"] = fake.street_name()
+  customer["modified"] = str(datetime.datetime(period.year, period.month, period.day, now.hour, now.minute, now.second, now.microsecond))
+  return customer
+
+def customer_change_contact(customer:dict, period:datetime):
+  now = datetime.datetime.now()
+  now.second
+  now.hour
+  now.microsecond
+  customer["contact_phone"] = fake.phone_number()
+  customer["contact_email"] = fake.email()
+  customer["modified"] = str(datetime.datetime(period.year, period.month, period.day, now.hour, now.minute, now.second, now.microsecond))
+  return customer
 
 records = [fake_customer(i) for i in range(total)]
 
 
+now = datetime.datetime.now()
+now.second
+now.hour
+now.microsecond
+
+
+def to_json_line(r:dict, day:int=-1):
+  
+  if day>-1:
+    dte_str = str(datetime.datetime(year, month, day, now.hour, now.minute, now.second, now.microsecond))
+    r["created"] = dte_str
+    r["modified"] = dte_str
+  
+  return "%s\n" % f"{json.dumps(r)}"
+
+files = {}
 for i in range(10):
+
   l = (i*10)
   u = ((i+1)*10)
   print(f"records: {l} -> {u}")
   record_set = records[l:u]
-  
-  
   
   day = i+1
   period = datetime.date(day=i+1,month=month,year=year)
@@ -132,53 +137,68 @@ for i in range(10):
   
   with open(file_name, "w") as f:
 
-    jsonlns = [f"{json.dumps(j)}" for j in record_set]
-    f.writelines("%s\n" % l for l in jsonlns)
+    f.writelines(to_json_line(r, day) for r in record_set)
+    
+  files[i+1] = { "file": file_name, "period": period }
   
 
+# insert modifications
+for k,v in files.items():
+  if k > 1:
+    with open(files[k-1]["file"], "r") as pf:
+      records = pf.readlines()
+      record_change1 = json.loads(records[0])
+      record_change1 = customer_change_address(record_change1, files[k]["period"])
+      
+      record_change2 = json.loads(records[1])
+      record_change2 = customer_change_contact(record_change2, files[k]["period"])
+      
+      with open(files[k]["file"], "a+") as cf:
+        cf.write(to_json_line(record_change1))
+        cf.write(to_json_line(record_change2))
 
+      
 
 try_copy(path)
 
 
 # COMMAND ----------
 
-raw_path = f"{path}/*/*/*/*.json"
+from pyspark.sql.functions import *
+
+partition_path = "*/*/*/*.json"
+raw_path = f"{path}/{partition_path}"
 config = {
   "inferSchema": True
 }
 df = spark.read.format("json").options(**config).load(raw_path)
-display(df)
+df = (df
+      .withColumn("created", expr("cast(created as timestamp)"))
+      .withColumn("modified", expr("cast(modified as timestamp)"))
+     )
 
-# COMMAND ----------
+save_schema(df.schema, schema_root, stage, schema_name, dataset_name)
 
-schema_path = f"{schema_root}/{stage}.{schema_name}"
-schema_file = f"{schema_path}/spark.{stage}.{schema_name}.{dataset_name}.json"
-
-
-try_rm(f"file:{schema_path}")
-  
-os.makedirs(schema_path, True)
-
-schema_json = json.loads(df.schema.json())
-schema = json.dumps(schema_json, indent=4)
-with open(schema_file, "w") as f:
-  f.write(schema)
-
-try_copy(schema_file)
 
 # COMMAND ----------
 
 schema = load_schema(stage, schema_name, dataset_name)
-
-raw_path = f"{path}/*/*/*/*.json"
 config = {
   "inferSchema": False
 }
 
-df = spark.read.format("json").schema(schema).options(**config).load(raw_path)
+df = (
+  spark.read
+  .format("json")
+  .schema(schema)
+  .options(**config)
+  .load(raw_path)
+  .withColumn("_SOURCE", input_file_name())
+  .orderBy(col("id"))
+)
+
 display(df)
 
 # COMMAND ----------
 
-assert df.count() == 100
+assert df.count() == 118
