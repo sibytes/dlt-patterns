@@ -166,3 +166,7 @@ config = {
 
 df = spark.read.format("json").schema(schema).options(**config).load(raw_path)
 display(df)
+
+# COMMAND ----------
+
+assert df.count() == 100
